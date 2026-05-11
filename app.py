@@ -13,8 +13,8 @@ from collections import deque
 
 app = Flask(__name__)
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8668028976:AAE2u1in1KGr1nRTJbaQXNPeDtMO35unoQ8")
+TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "7411219487")
 WEBHOOK_SECRET     = os.environ.get("WEBHOOK_SECRET", "")
 MAX_SIGNALS        = 100
 
