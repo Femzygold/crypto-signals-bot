@@ -24,9 +24,6 @@ signals: deque = deque(maxlen=MAX_SIGNALS)
 # ── Telegram ────────────────────────────────────────────────────────────────
 
 def send_telegram(message: str) -> bool:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        app.logger.warning("Telegram credentials not set.")
-        return False
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     try:
         resp = requests.post(url, json={
