@@ -6,7 +6,7 @@ from collections import deque
 app = Flask(__name__)
 
 # ── CREDENTIALS ───────────────────────────────────────────────────
-TELEGRAM_BOT_TOKEN = "PASTE_YOUR_TOKEN_HERE"
+TELEGRAM_BOT_TOKEN = "8668028976:AAE2u1in1KGr1nRTJbaQXNPeDtMO35unoQ8"
 TELEGRAM_CHAT_ID   = "7411219487"
 DASHBOARD_PASSWORD = "signal123"
 # ─────────────────────────────────────────────────────────────────
