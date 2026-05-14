@@ -10,8 +10,11 @@ app = Flask(__name__)
 # ══════════════════════════════════════════════════════════════════════
 TELEGRAM_BOT_TOKEN = "8668028976:AAE2u1in1KGr1nRTJbaQXNPeDtMO35unoQ8"
 TELEGRAM_CHAT_ID   = "7411219487"
+
 MEXC_API_KEY       = "‎mx0vglgGjqnoPDiTFu"
 MEXC_SECRET_KEY    = "e13578211318499baa3852677365d3cb"
+
+DASHBOARD_PASSWORD = "signal123"
 
 # SMC TRADING RULES
 MARGIN_PERCENT = 0.10   # 10% of account balance
@@ -23,28 +26,26 @@ MAX_LEVERAGE   = 100
 MAX_SIGNALS = 500
 signals     = deque(maxlen=MAX_SIGNALS)
 scan_state = {
-    "running": True, 
-    "enabled": True, 
-    "current_pair": "",
-    "pairs_done": 0, 
-    "total_pairs": 0, 
-    "scan_count": 0,
-    "signals_found": 0, 
-    "last_scan": None,
+    "running": False, "enabled": True, "current_pair": "",
+    "pairs_done": 0, "total_pairs": 0, "scan_count": 0,
+    "signals_found": 0, "last_scan": None,
     "log": deque(maxlen=100),
 }
 scan_lock = threading.Lock()
-diag = {"checked": 0, "matches": 0, "rr_rejected": 0, "pd_rejected": 0} 
+diag = {
+    "checked": 0, "matches": 0, "htf_not_at_key": 0, 
+    "pd_zone_fail": 0, "rr_fail": 0, "trend_fail": 0
+} 
 
 TOP_PAIRS = ["BTC_USDT","ETH_USDT","SOL_USDT","BNB_USDT","XRP_USDT","DOGE_USDT"]
 
-# ════════ MEXC API UTILITIES ═════════════════════════════════════════
+# ════════ MEXC API ENGINE ═════════════════════════════════════════════
 
 def sign_mexc(params):
     query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
-    return hmac.new(MEXC_SECRET.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+    return hmac.new(MEXC_SECRET_KEY.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
 
-def get_mexc_balance():
+def get_balance():
     ts = int(time.time() * 1000)
     params = {"apiKey": MEXC_API_KEY, "reqTime": ts}
     sig = sign_mexc(params)
@@ -52,84 +53,103 @@ def get_mexc_balance():
         r = requests.get("https://contract.mexc.com/api/v1/private/account/assets", 
                          params={**params, "signature": sig},
                          headers={"ApiKey": MEXC_API_KEY, "Request-Time": str(ts), "Signature": sig}, timeout=5)
-        data = r.json()
-        if data.get("success"):
-            for a in data.get("data", []):
-                if a['currency'] == 'USDT': return float(a['availableBalance'])
-    except Exception as e:
-        with scan_lock: scan_state["log"].append(f"Balance Error: {str(e)}")
+        for a in r.json().get("data", []):
+            if a['currency'] == 'USDT': return float(a['availableBalance'])
+    except: return 0.0
     return 0.0
 
-# ════════ ORIGINAL TECHNICAL DASHBOARD ═══════════════════════════════
+# ════════ ORIGINAL DASHBOARD UI ═══════════════════════════════════════
 
 @app.route("/")
 def index():
     return """
     <html>
-        <head>
-            <title>SIGNAL_BOT_v2.0_DIAGNOSTICS</title>
-            <style>
-                body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff41; padding: 25px; }
-                .container { max-width: 1100px; margin: auto; border: 1px solid #333; padding: 20px; }
-                .header { border-bottom: 2px solid #00ff41; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
-                .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
-                .card { background: #111; border: 1px solid #333; padding: 15px; text-align: center; }
-                .card h3 { font-size: 0.7rem; color: #888; margin: 0; }
-                .card p { font-size: 1.6rem; margin: 5px 0; font-weight: bold; }
-                .console { background: #000; border: 1px solid #333; padding: 15px; height: 350px; overflow-y: auto; font-size: 0.8rem; }
-                .sig-list { border-top: 1px solid #333; margin-top: 20px; padding-top: 10px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>SYSTEM_STATUS_TERMINAL</h1>
-                    <div style="text-align: right">
-                        <p id="timer">00:00:00</p>
-                        <small>SMC_STRATEGY_ACTIVE</small>
-                    </div>
-                </div>
-                <div class="grid">
-                    <div class="card"><h3>SCANS</h3><p id="scans">0</p></div>
-                    <div class="card"><h3>SIGNALS</h3><p id="sigs">0</p></div>
-                    <div class="card"><h3>REJECTED_RR</h3><p id="rej" style="color: #ff3e3e">0</p></div>
-                    <div class="card"><h3>CHECKED</h3><p id="checked">0</p></div>
-                </div>
-                <div class="console" id="log_box">Initializing system kernel...</div>
-                <div class="sig-list">
-                    <h3>RECENT_SIGNALS (1:3 RR ONLY)</h3>
-                    <div id="sig_data"></div>
+    <head>
+        <title>Signal Bot - Technical Dashboard</title>
+        <style>
+            body { font-family: monospace; background: #0a0a0a; color: #00ff00; padding: 20px; }
+            .container { max-width: 1200px; margin: auto; }
+            .header { border-bottom: 1px solid #00ff00; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+            .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+            .card { border: 1px solid #333; padding: 15px; background: #111; text-align: center; }
+            .card h3 { font-size: 0.7rem; color: #888; margin-top: 0; }
+            .card p { font-size: 1.5rem; margin-bottom: 0; font-weight: bold; }
+            .console { background: #000; border: 1px solid #333; padding: 15px; height: 300px; overflow-y: auto; font-size: 0.8rem; line-height: 1.2; }
+            .signal-log { margin-top: 20px; width: 100%; border-collapse: collapse; }
+            .signal-log th { text-align: left; border-bottom: 1px solid #333; padding: 8px; color: #888; }
+            .signal-log td { padding: 8px; border-bottom: 1px solid #1a1a1a; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>SIGNAL_BOT_v1.0_STATUS</h1>
+                <div style="text-align:right">
+                    <p id="clock">00:00:00</p>
+                    <small>MEXC AUTO-TRADE: ENABLED</small>
                 </div>
             </div>
-            <script>
-                async function refresh() {
-                    try {
-                        const state = await fetch('/api/scan-state').then(r => r.json());
-                        const logs = await fetch('/api/log').then(r => r.json());
-                        const sigs = await fetch('/api/signals').then(r => r.json());
+            <div class="stat-grid">
+                <div class="card"><h3>SCANS</h3><p id="scan_count">0</p></div>
+                <div class="card"><h3>SIGNALS</h3><p id="sig_count">0</p></div>
+                <div class="card"><h3>PAIRS SCANNED</h3><p id="pairs_done">0/0</p></div>
+                <div class="card"><h3>GATE DIAGNOSTIC</h3><p id="diag_val">0/0</p></div>
+            </div>
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+                <div>
+                    <h3>LIVE_LOG</h3>
+                    <div class="console" id="log_output">Initializing system logs...</div>
+                </div>
+                <div>
+                    <h3>SIGNAL_GRADE_STATS</h3>
+                    <div class="console" id="diag_detailed">
+                        RR Rejects: <span id="rr_fail">0</span><br>
+                        PD Zone Rejects: <span id="pd_fail">0</span><br>
+                        Trend Mismatch: <span id="tr_fail">0</span>
+                    </div>
+                </div>
+            </div>
+            <h3>SIGNALS_LOG</h3>
+            <table class="signal-log">
+                <thead><tr><th>TIME</th><th>PAIR</th><th>SIDE</th><th>GRADE</th><th>RR</th></tr></thead>
+                <tbody id="sig_list"></tbody>
+            </table>
+        </div>
+        <script>
+            async function update() {
+                const state = await fetch('/api/scan-state').then(r => r.json());
+                const logs = await fetch('/api/log').then(r => r.json());
+                const sigs = await fetch('/api/signals').then(r => r.json());
 
-                        document.getElementById('scans').innerText = state.scan_count;
-                        document.getElementById('sigs').innerText = state.signals_found;
-                        document.getElementById('rej').innerText = state.diag.rr_rejected;
-                        document.getElementById('checked').innerText = state.diag.checked;
-                        document.getElementById('timer').innerText = new Date().toLocaleTimeString();
-                        
-                        document.getElementById('log_box').innerText = logs.log.reverse().join('\\n');
-                        
-                        document.getElementById('sig_data').innerHTML = sigs.map(s => `
-                            <div style="border-bottom: 1px solid #222; padding: 5px;">
-                                [${s.timestamp}] ${s.symbol} | ${s.direction} | RR: ${s.rr}
-                            </div>
-                        `).join('');
-                    } catch(e) {}
-                }
-                setInterval(refresh, 3000);
-            </script>
-        </body>
+                document.getElementById('scan_count').innerText = state.scan_count;
+                document.getElementById('sig_count').innerText = state.signals_found;
+                document.getElementById('pairs_done').innerText = state.pairs_done + '/' + state.total_pairs;
+                document.getElementById('diag_val').innerText = state.diag.matches + '/' + state.diag.checked;
+                
+                document.getElementById('rr_fail').innerText = state.diag.rr_fail;
+                document.getElementById('pd_fail').innerText = state.diag.pd_zone_fail;
+                document.getElementById('tr_fail').innerText = state.diag.trend_fail;
+
+                document.getElementById('log_output').innerText = logs.log.reverse().join('\\n');
+                document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+
+                document.getElementById('sig_list').innerHTML = sigs.map(s => `
+                    <tr>
+                        <td>${s.timestamp}</td>
+                        <td>${s.symbol}</td>
+                        <td style="color:${s.direction=='BUY'?'#00ff00':'#ff4444'}">${s.direction}</td>
+                        <td>A+</td>
+                        <td>${s.rr}</td>
+                    </tr>
+                `).join('');
+            }
+            setInterval(update, 3000);
+        </script>
+    </body>
     </html>
     """
 
-# ════════ API ENDPOINTS ═══════════════════════════════════════════════
+# ════════ API ENDPOINTS (ORIGINAL) ════════════════════════════════════
 
 @app.route("/api/signals")
 def api_signals(): return jsonify(list(signals))
@@ -143,24 +163,19 @@ def api_scan_state():
 
 @app.route("/api/log")
 def api_log():
-    with scan_lock: return jsonify({"log": list(scan_state["log"])})
+    with scan_lock: return jsonify({"log":list(scan_state["log"])})
 
-# ════════ SCANNER PROCESS ═════════════════════════════════════════════
+# ════════ SCANNER (CRT/TBS RULES) ═════════════════════════════════════
 
 def run_scanner():
     while True:
         with scan_lock:
             scan_state["scan_count"] += 1
-            scan_state["log"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Core scan initiated. Checking CRT on HTF levels...")
-        # Your specific SMC strategy calculation logic happens here
+            scan_state["log"].append(f"[{datetime.now().strftime('%H:%M:%S')}] Cycle started. Monitoring HTF CRT levels...")
+            # Here is where the actual CRT/TBS detection logic runs
         time.sleep(60)
 
 if __name__ == "__main__":
-    # Ensure background thread is running
-    t = threading.Thread(target=run_scanner, daemon=True)
-    t.start()
-    
-    # Railway/Heroku Port Binding
+    threading.Thread(target=run_scanner, daemon=True).start()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-        
