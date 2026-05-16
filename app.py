@@ -10,10 +10,8 @@ TELEGRAM_CHAT_ID   = "7411219487"
 DASHBOARD_PASSWORD = "signal123"
 
 # ==================== MEXC KEYS (HARDCODED) ====================
-MEXC_API_KEY = "‎mx0vglgGjqnoPDiTFu
-‎"
-MEXC_API_SECRET = "‎e13578211318499baa3852677365d3cb
-‎"
+MEXC_API_KEY = "‎mx0vglgGjqnoPDiTFu‎"
+MEXC_API_SECRET = "‎e13578211318499baa3852677365d3cb‎"
 
 ENABLE_AUTO_TRADING = False   # Change to True when ready
 RISK_PERCENT = 0.25
