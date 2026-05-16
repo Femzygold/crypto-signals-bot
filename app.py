@@ -87,7 +87,9 @@ class MexcFuturesTrader:
         log(f"ORDER {side} {symbol} @ {price} | Success: {result.get('success')}")
         return result
 
-trader = MexcFuturesTrader()
+trader = MexcFuturesTrader()LOGIN_HTML = r"""<!DOCTYPE html> ... (the entire long login html) ... """
+
+DASHBOARD_HTML = r"""<!DOCTYPE html> ... (the entire long dashboard html) ... """
 
 def log(msg):
     ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
@@ -126,7 +128,8 @@ def scanner_loop():
 
 # ====================== ROUTES ======================
 @app.route("/")
-def root():
+LOGIN_HTML = "<h1>Login Page Loading...</h1>"
+DASHBOARD_HTML = "<h1>Dashboard Loading... Scanner is Running</h1>"def root():
     token = request.cookies.get("session")
     if token and token in sessions:
         return make_response(DASHBOARD_HTML, 200, {"Content-Type": "text/html"})
