@@ -18,11 +18,11 @@ sessions    = set()
 
 # ── MEXC AUTO-TRADE CONFIG ────────────────────────────────────────────
 trade_config = {
-    "enabled":       False,        # master on/off
+    "enabled":       True,        # master on/off
     "api_key":       MEXC_API_KEY,
     "api_secret":    MEXC_API_SECRET,
-    "risk_pct":      1.0,          # % of account balance per trade
-    "max_trades":    3,            # max open positions at once
+    "risk_pct":      10,          # % of account balance per trade
+    "max_trades":    5,            # max open positions at once
     "leverage":      10,           # default leverage
 }
 open_trades  = {}                  # symbol -> trade info
